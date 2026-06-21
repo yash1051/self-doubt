@@ -174,7 +174,7 @@ class Guard:
     # --- the check ---------------------------------------------------------
 
     def check(self, action: str, args=None,
-              confidence=None, evidence="", on_goal=True,
+              confidence=None, evidence="", on_goal=None,
               reversibility: Optional[str] = None,
               recipients_this_run: Optional[int] = None,
               decision_hint: Optional[str] = None) -> Verdict:
@@ -234,7 +234,13 @@ class Guard:
                     reasons.append("confidence rose after a missed prediction (rationalization)")
 
         # ----- 3. goal drift ------------------------------------------------
-        if on_goal is False:
+        # `on_goal=None` means the agent didn't say — fire a `goal_unspecified`
+        # trigger to force an explicit yes/no before the action proceeds.
+        if on_goal is None:
+            fired.append({"trigger": "goal_unspecified",
+                          "detail": "agent did not state on_goal=yes/no explicitly"})
+            reasons.append("on_goal was not stated; agent must explicitly answer yes or no")
+        elif on_goal is False:
             fired.append({"trigger": "goal_drift",
                           "detail": "agent flagged current action as off-goal"})
             reasons.append("current action does not serve the stated goal")
@@ -386,7 +392,7 @@ def main():
     p.add_argument("--goal", default="")
     p.add_argument("--confidence", type=float, default=None)
     p.add_argument("--evidence", default="")
-    p.add_argument("--on-goal", default="yes")
+    p.add_argument("--on-goal", default=None)
     p.add_argument("--reversibility", default="reversible",
                    choices=list(CONFIDENCE_FLOOR.keys()))
     p.add_argument("--recipients-this-run", type=int, default=None)
@@ -407,7 +413,7 @@ def main():
         args=json.loads(args.args) if args.args else None,
         confidence=args.confidence,
         evidence=args.evidence,
-        on_goal=_as_bool(args.on_goal),
+        on_goal=(None if args.on_goal is None else _as_bool(args.on_goal)),
         reversibility=args.reversibility,
         recipients_this_run=args.recipients_this_run,
     )

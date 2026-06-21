@@ -46,6 +46,22 @@ def test_first_call_is_green():
         os.unlink(lp)
 
 
+def test_unspecified_on_goal_is_yellow():
+    """Default on_goal=None must fire a `goal_unspecified` trigger so the
+    agent is forced to state yes/no explicitly. This is the v3.1.1
+    safety-default fix — silent yes was the most dangerous default
+    in v3.0/v3.1."""
+    g, lp = _fresh_guard()
+    try:
+        v = g.check(action="send_email", args={"to": "alice"},
+                    confidence=80, evidence="ok",
+                    reversibility="reversible")  # no on_goal
+        assert v.verdict == "yellow"
+        assert any(t["trigger"] == "goal_unspecified" for t in v.fired_triggers)
+    finally:
+        os.unlink(lp)
+
+
 def test_third_identical_call_is_red():
     g, lp = _fresh_guard()
     try:

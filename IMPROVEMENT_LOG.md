@@ -129,3 +129,50 @@ leverage behavior fix — silent yes is the most dangerous default in
 safety tooling. Plus: add a runnable LangGraph demo that imports
 `guard.Guard` so framework-integration.md's code sample stops being
 illustrative-only.
+
+## [v3.1.1] — 2026-06-21T21:50Z — cycle 2
+
+**Hypothesis (what gap am I closing?):** v3.0.0 + v3.1.0 had `--on-goal`
+defaulting to `yes`. The agent never had to *prove* the action served the
+goal — silence was consent. SKILL.md anti-patterns explicitly call this out.
+This is the single highest-leverage behavior fix in the v3 series.
+
+**Change:**
+- `scripts/guard.py`: `check()` now defaults `on_goal=None`. When the
+  agent doesn't explicitly say yes/no, a new `goal_unspecified` trigger
+  fires (yellow — proceed with caution, but a log entry is created).
+- CLI default for `--on-goal` is now `None` (omitting the flag means
+  "I didn't say", which fires the trigger).
+- `tests/test_guard.py`: new test `test_unspecified_on_goal_is_yellow`
+  verifies the behavior.
+- Version bumped to 3.1.1.
+
+**Why this, not the other things I noticed:**
+- The safety-default fix is documented as the single highest-leverage
+  behavior change in the v3.0 self-critique. Skipping it for a more
+  "exciting" change would have been feature-collecting.
+- Yellow (not red) on the first occurrence is the right call: a
+  brand-new agent just installed the skill will trip this on its
+  first action. Red on first contact would be "the alarm that
+  cried wolf" and train the operator to ignore the log. Yellow
+  forces an explicit decision while still letting the run continue
+  if the operator clears it.
+
+**Critique of self:**
+- What I might have gotten wrong: I made `goal_unspecified` *yellow*
+  not *red*, on the theory that a strict default would be ignored.
+  The opposite is also defensible: yellow trains agents to skip
+  the question. v3.1.2 (next cycle) will likely add a strict mode
+  flag.
+- What's still missing: an agent that *lies* about on_goal (says True
+  when it's False) is still not caught. The skill trusts the
+  agent's claim. Real fix needs an LLM-as-judge or an explicit
+  re-check — out of scope for v3.
+- Confidence the change is correct: 88. The behavior is well-isolated
+  (one new trigger, one default flip, one new test). The test is
+  tight.
+
+**Next cycle's prompt (the very next thing to try):**
+Add a `--require-explicit-on-goal` flag that turns the yellow into a
+hard red, plus a `guard.score()` library function returning a 0-100
+discipline score for dashboarding. Two small features, both Tier 2.

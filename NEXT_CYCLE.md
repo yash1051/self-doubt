@@ -1,47 +1,31 @@
-# v3.1.0 (in progress)
+# v3.1.1 (shipped) → v3.1.2 prompt
 
-## Goal
-Close the gaps that v3.0.0 self-critique flagged.
+## What this cycle shipped
+- `--on-goal` default flipped from `yes` → `None`.
+- New `goal_unspecified` trigger fires (yellow) when the agent doesn't say.
+- CLI default changed to omit the flag entirely.
+- New test `test_unspecified_on_goal_is_yellow`.
 
-## Specific tasks
+## Hypothesis for cycle 3 (v3.1.2)
 
-1. **Add `tests/` directory** with three files:
-   - `test_loop_detector.py` — adversarial cases for exact / semantic /
-     oscillation detection, including paraphrase attacks
-     (`"book a flight"` vs `"reserve a seat"`).
-   - `test_guard.py` — drive `guard.check()` through every discipline and
-     verify exit codes (0/2/3) and the trigger-name emitted.
-   - `test_audit_log.py` — verify hash chain integrity, detect tampering,
-     verify `note` event type round-trips.
+The single biggest remaining risk is **silent on_goal=True from the agent's
+own reasoning**, not from missing flags. When an LLM agent decides the action
+is on-goal, it has an incentive to say `yes` because the next step runs more
+smoothly. The CLI default is fixed, but the *agent's* default is not.
 
-2. **Change `--on-goal` default to `unknown`** (from the silent-yes default).
-   The agent must opt in by stating `yes` or `no`. This is a safety default
-   fix — the SKILL.md anti-patterns explicitly call out that silent defaults
-   launder recklessness.
+**Specific tasks:**
 
-3. **Add `.github/workflows/test.yml`** that runs `tests/` on every push.
-   Minimum: install Python 3.8, run `pytest tests/`. Cheap, immediate
-   safety net for the loop's own commits.
-
-4. **Bump version in `version.txt`**, `SKILL.md` frontmatter, and the
-   README badge.
-
-5. **Append the cycle entry to `IMPROVEMENT_LOG.md`** with the cycle's
-   self-critique.
+1. Add a `--require-explicit-on-goal` flag to `guard.py` that makes
+   `on_goal=None` a *red* trigger (not just yellow), with a forced
+   "PAUSE — state yes or no before continuing" message in stderr.
+2. Add a `guard.score()` library function that returns a 0-100 score
+   reflecting how disciplined the recent log looks (proportion of explicit
+   on_goal=True vs. on_goal=None, evidence-clause presence rate, mean
+   confidence band, etc.). This is a quality metric the operator can
+   dashboard on.
+3. One test for the new flag, one for `guard.score()`.
 
 ## Verification
-
-After all four tasks, `python3 examples/demo_email_loop.py` must still show
-85 → 5 sends and `audit_log.py verify` must report `✅ Chain intact`.
-
-## Stop condition for this cycle
-
-If `pytest tests/` passes AND the demo still works AND the diff is < 5 files
-AND net LOC added is < 200, ship it as v3.1.0.
-
-## Next cycle (v3.1.1) prompt
-
-After v3.1.0 lands, the natural next gap is the integration code sample in
-`references/framework-integration.md` — it's illustrative, not runnable.
-Write a runnable LangGraph demo that imports `guard.Guard` and the scorecard
-prints "✅ chain intact" on a real run.
+- pytest 100% green
+- demo still 85 → 5 sends
+- ≤ 5 files changed, ≤ 200 LOC net
