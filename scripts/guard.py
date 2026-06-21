@@ -105,7 +105,8 @@ class Guard:
                  recipient_cap: int = RECIPIENT_DEFAULT_CAP,
                  hard_step_cap: Optional[int] = None,
                  reversibility: str = "reversible",
-                 require_explicit_on_goal: bool = False):
+                 require_explicit_on_goal: bool = False,
+                 score_floor: Optional[float] = None):
         self.log = AuditLog(log_path)
         self.goal = goal
         self.expected_steps = expected_steps
@@ -114,6 +115,10 @@ class Guard:
         self.default_reversibility = reversibility
         # When True, `on_goal=None` becomes a red (not yellow) trigger.
         self.require_explicit_on_goal = require_explicit_on_goal
+        # Optional floor on the running discipline score (0-100). When the
+        # post-check score drops below this, fire a `low_discipline_score`
+        # trigger (yellow). None = no gate.
+        self.score_floor = score_floor
 
     # --- helpers -----------------------------------------------------------
 
@@ -332,6 +337,32 @@ class Guard:
                 result="",
             )
 
+        # ----- 7. score floor (post-check gate) ----------------------------
+        # Compute the running discipline score *after* logging this action,
+        # so it includes the action we just logged. If below the floor, fire
+        # a yellow trigger.
+        if self.score_floor is not None:
+            s = self.score()
+            if s["score"] < self.score_floor:
+                fired.append({
+                    "trigger": "low_discipline_score",
+                    "detail": (f"score {s['score']} below floor {self.score_floor} "
+                               f"(components: {s['components']})"),
+                })
+                reasons.append(
+                    f"running discipline score {s['score']} below floor {self.score_floor}"
+                )
+                self.log.trigger(
+                    trigger="low_discipline_score",
+                    detail=f"score {s['score']} below floor {self.score_floor}",
+                    response="proceed_cautious",
+                    result="",
+                )
+                # Don't override an existing red, but yellow gets upgraded.
+                if verdict == "green":
+                    verdict = "yellow"
+                    next_action = "proceed_cautious"
+
         return Verdict(verdict=verdict, reasons=reasons,
                        next_action=next_action, fired_triggers=fired)
 
@@ -516,6 +547,8 @@ def main():
                    choices=list(CONFIDENCE_FLOOR.keys()))
     p.add_argument("--recipients-this-run", type=int, default=None)
     p.add_argument("--expected-steps", type=int, default=None)
+    p.add_argument("--score-floor", type=float, default=None,
+                   help="if set, fire low_discipline_score trigger when running score drops below this")
     p.add_argument("--hard-step-cap", type=int, default=None)
     p.add_argument("--recipient-cap", type=int, default=RECIPIENT_DEFAULT_CAP)
     p.add_argument("--log", default=os.environ.get("INTRINSIC_LOG", "metacog_audit.jsonl"))
@@ -525,7 +558,8 @@ def main():
               expected_steps=args.expected_steps,
               hard_step_cap=args.hard_step_cap,
               recipient_cap=args.recipient_cap,
-              reversibility=args.reversibility)
+              reversibility=args.reversibility,
+              score_floor=args.score_floor)
 
     verdict = g.check(
         action=args.action,

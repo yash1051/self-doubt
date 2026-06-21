@@ -28,10 +28,7 @@ def _fresh_guard(**kwargs):
     defaults = dict(log_path=log_path, goal="test-goal", expected_steps=100,
                     reversibility="reversible")
     defaults.update(kwargs)
-    return Guard(**defaults), log_path
-
-
-# --- 1. Discipline: repetition -----------------------------------------------
+    return Guard(**defaults), log_path# --- 1. Discipline: repetition -----------------------------------------------
 
 def test_first_call_is_green():
     g, lp = _fresh_guard()
@@ -122,6 +119,42 @@ def test_score_penalizes_unspecified_on_goal():
                 reversibility="costly")  # no on_goal
         s = g.score()
         assert s["components"]["explicit_on_goal"] < 100
+    finally:
+        os.unlink(lp)
+
+
+def test_score_floor_fires_low_discipline_trigger():
+    """With score_floor=99, even a near-perfect run fires low_discipline_score
+    because calibration tops out at 80 (|80 - 100| = 20)."""
+    g, lp = _fresh_guard(score_floor=99)
+    try:
+        g.check(action="send_email", args={"to": "a"},
+                confidence=80, evidence="ok", on_goal=True,
+                reversibility="costly")
+        g.observed(action="send_email", predicted="200", observed="200",
+                   confidence_was=80, confidence_should=80)
+        v = g.check(action="send_email", args={"to": "b"},
+                    confidence=80, evidence="ok", on_goal=True,
+                    reversibility="costly")
+        assert v.verdict == "yellow"
+        assert any(t["trigger"] == "low_discipline_score" for t in v.fired_triggers)
+    finally:
+        os.unlink(lp)
+
+
+def test_score_floor_off_does_not_fire():
+    """Without score_floor, no low_discipline_score trigger is ever emitted."""
+    g, lp = _fresh_guard()
+    try:
+        g.check(action="send_email", args={"to": "a"},
+                confidence=80, evidence="ok", on_goal=True,
+                reversibility="costly")
+        g.observed(action="send_email", predicted="200", observed="200",
+                   confidence_was=80, confidence_should=80)
+        v = g.check(action="send_email", args={"to": "b"},
+                    confidence=80, evidence="ok", on_goal=True,
+                    reversibility="costly")
+        assert not any(t["trigger"] == "low_discipline_score" for t in v.fired_triggers)
     finally:
         os.unlink(lp)
 

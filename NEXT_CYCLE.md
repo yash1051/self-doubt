@@ -1,33 +1,32 @@
-# v3.1.2 (shipped) → v3.1.3 prompt
+# v3.1.3 (shipped) → v3.1.4 prompt
 
-## What cycle 3 shipped
-- `Guard(require_explicit_on_goal=True)` strict mode promotes
-  `goal_unspecified` from yellow to red.
-- `Guard.score()` library function: 0-100 overall + 5 named components
-  (explicit_on_goal, evidence_rate, calibration, trigger_response,
-  low_failure_rate).
-- `on_goal` value in JSONL is now a tri-state: `true` / `false` /
-  `"unspecified"`. The score function reads the new value correctly.
-- 4 new tests: strict mode red, score components present, evidence
-  penalty, on_goal-unspecified penalty.
+## What cycle 4 shipped
+- `Guard(score_floor=N)` constructor param. After each `check()`,
+  computes the running discipline score; if below N, fires a
+  `low_discipline_score` trigger (yellow).
+- CLI: `--score-floor N` flag.
+- 2 new tests: floor fires trigger, no floor doesn't fire.
+- Bug fix: missing `--hard-step-cap` argparse arg (regression from
+  prior cycle's CLI reorganization).
 
-## Hypothesis for cycle 4 (v3.1.3)
+## Hypothesis for cycle 5 (v3.1.4)
 
-`guard.score()` is a static report — useful for after-the-fact review,
-useless while the agent is mid-run. The single highest-leverage addition
-is a **score-threshold gate** that fires when the discipline score
-*falls below* an operator-set floor. This is the discipline equivalent
-of "your credit score dropped, here's a yellow flag."
+The `score_floor` gate fires when the score drops, but the *agent*
+has no way to see *which component* dropped. The discipline feedback
+loop is incomplete: agent gets "you're below floor" but not "your
+evidence_rate is the problem." A good score gate should be a *teaching*
+mechanism, not just a tripwire.
 
 **Specific tasks:**
 
-1. Add `Guard(score_floor=80)` constructor param. After computing the
-   score on each `check()`, if the running score < floor, fire a
-   `low_discipline_score` trigger (yellow by default).
-2. CLI: `--score-floor 80` flag.
-3. One test: well-disciplined run stays green, poorly-disciplined run
-   (missing evidence + missing on_goal) gets a low_discipline_score
-   trigger.
+1. When `low_discipline_score` fires, include the per-component
+   breakdown in the trigger `detail` (already done — verify) and
+   in the `reasons` list. The agent should be able to read
+   "evidence_rate=40, calibration=80" and know what to fix.
+2. Add a `Guard.score_breakdown()` method that returns the component
+   dict plus a per-component trend (is each component going up or
+   down over the last 5 calls?). This is a Tier 2 polish.
+3. One test: floor fires trigger, detail includes component breakdown.
 
 ## Verification
 - pytest 100% green

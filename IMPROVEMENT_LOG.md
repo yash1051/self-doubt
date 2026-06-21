@@ -227,3 +227,51 @@ Add a `score_floor` constructor param + `--score-floor` CLI flag that
 fires a `low_discipline_score` trigger (yellow) when the running
 score falls below the floor. This converts the score from a static
 report into a live gate.
+
+## [v3.1.3] — 2026-06-21T23:00Z — cycle 4
+
+**Hypothesis (what gap am I closing?):** v3.1.2's `score()` is a static
+report — useful for after-the-fact review, useless mid-run. An operator
+running a long agent should be able to *gate* the run on a discipline
+floor, not just observe the score.
+
+**Change:**
+- `Guard(score_floor=N)` constructor param. After each `check()`,
+  computes the running discipline score. If `score < floor`, fires a
+  `low_discipline_score` trigger (yellow) with the full component
+  breakdown in the detail. The score is computed *after* the new
+  pre_action is logged, so the score includes the current action.
+- CLI: `--score-floor N` flag (alongside the existing CLI args).
+- 2 new tests: floor fires trigger, no floor doesn't fire.
+- Bug fix (caught by re-running the CLI smoke test): the previous
+  cycle's CLI reorganization dropped `--hard-step-cap` from the
+  argparse group. Restored.
+- Version bumped to 3.1.3.
+
+**Why this, not the other things I noticed:**
+- Live score gating is the only way to make the score function
+  *actionable* rather than decorative. v3.1.2 ships a meter; v3.1.3
+  ships the alarm.
+- The bug fix was cheap and caught at the same time the new feature
+  was being smoke-tested. Skipping it would have left a silent
+  regression in the CLI surface.
+
+**Critique of self:**
+- What I might have gotten wrong: a single floor value is
+  one-dimensional. Real discipline has different floors for
+  different components (`evidence_rate >= 90` might matter more
+  than `calibration >= 80`). v3.2 should support per-component
+  floors.
+- What's still missing: the score gate only fires yellow, not
+  red. A long-running agent drifting into chaos will see yellow
+  repeatedly; some threshold for "repeatedly below floor" should
+  promote to red.
+- Confidence the change is correct: 88. Behavior is isolated to
+  one post-check block; tests cover both modes.
+
+**Next cycle's prompt (the very next thing to try):**
+Make the `low_discipline_score` trigger more diagnostic: include
+the per-component breakdown in the trigger's `reasons` list (not
+just `detail`), and add a `Guard.score_breakdown()` that returns
+per-component trend (up/down over last 5 calls). A teaching gate,
+not just a tripwire.
