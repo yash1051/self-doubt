@@ -58,8 +58,8 @@ demonstrating human oversight under high-risk AI rules).
 ## See it work in 10 seconds
 
 ```bash
-git clone https://github.com/<your-org>/intrinsic-safety.git
-cd intrinsic-safety
+git clone https://github.com/yash1051/self-doubt.git
+cd self-doubt
 python3 examples/demo_email_loop.py
 ```
 
@@ -83,8 +83,8 @@ python3 examples/demo_email_loop.py
 ================================================================
 
 ================================================================
- WITHOUT intrinsic safety:  85 sends (80 duplicates).   ← the disaster
- WITH intrinsic safety:      5 sends  (0 duplicates).   ← loop caught
+ WITHOUT self-doubt:  85 sends (80 duplicates).   ← the disaster
+ WITH self-doubt:      5 sends  (0 duplicates).   ← loop caught
 ================================================================
  Duplicate sends prevented: 80
 ```
@@ -134,8 +134,8 @@ agent changed its behavior — it didn't just *document* the loop, it *stopped* 
 **Claude Code / Codex / Gemini CLI** — drop the folder into your skills directory:
 
 ```bash
-git clone https://github.com/<your-org>/intrinsic-safety.git
-cp -r intrinsic-safety ~/.claude/skills/      # or your tool's skills dir
+git clone https://github.com/yash1051/self-doubt.git
+cp -r self-doubt ~/.claude/skills/      # or your tool's skills dir
 ```
 
 **Any framework** — see [`references/framework-integration.md`](references/framework-integration.md)
@@ -297,7 +297,7 @@ Full guide: [`references/escalation-protocol.md`](references/escalation-protocol
 ## What's in the box
 
 ```
-intrinsic-safety/
+self-doubt/
 ├── SKILL.md                          # the skill itself (start here)
 ├── README.md                         # this file
 ├── CHANGELOG.md                      # v3.0.0 / v2.0.0 / v1.0.0 history
@@ -356,9 +356,9 @@ Full recipes: [`references/framework-integration.md`](references/framework-integ
 
 ## What's new in v3
 
-v3 is the **combined release** of two pre-existing intrinsic-safety skills:
+v3 is the **combined release** of two pre-existing self-monitoring skills:
 
-- `intrinsic-safety` v2 (loop detection + calibration mechanics)
+- `self-doubt` v2 (loop detection + calibration mechanics)
 - `metacognitive-discipline` v1.0.0 (four-discipline protocol + scorecard)
 
 The combined v3 ships the union: every feature from both, in one Python 3
@@ -390,7 +390,7 @@ See [`CHANGELOG.md`](CHANGELOG.md) for the full v1 → v2 → v3 history.
 
 This skill is the combined work of two prior efforts:
 
-- **`intrinsic-safety` v1–v2** — original loop-detection and calibration mechanics,
+- **`self-doubt` v1–v2** — original loop-detection and calibration mechanics,
   built and iterated on 2026-06-22.
 - **`metacognitive-discipline` v1.0.0** by [Antier Solutions][antier] — the
   four-discipline protocol, hash-chained audit log, escalation ladder,

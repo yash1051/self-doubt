@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-demo_email_loop.py — the 89-email loop, with and without intrinsic safety.
+demo_email_loop.py — the 89-email loop, with and without self-doubt.
 
 The showcase. It simulates the canonical runaway: a source list with duplicate
 rows, and an agent told to "send one follow-up each." Run it and watch the
@@ -43,7 +43,7 @@ STOP_CONDITIONS = "No duplicate sends; one email per unique recipient; cap 10 be
 
 def run_without_discipline():
     print("\n" + "=" * 64)
-    print(" WITHOUT intrinsic safety")
+    print(" WITHOUT self-doubt")
     print("=" * 64)
     sent = [addr for addr in SOURCE_LIST]   # naive: send to every row
     dupes = len(sent) - len(set(sent))
@@ -55,7 +55,7 @@ def run_without_discipline():
 
 def run_with_discipline():
     print("\n" + "=" * 64)
-    print(" WITH intrinsic safety")
+    print(" WITH self-doubt")
     print("=" * 64)
     log_path = os.path.join(HERE, "demo_audit.jsonl")
     if os.path.exists(log_path):

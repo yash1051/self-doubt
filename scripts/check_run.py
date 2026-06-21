@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-check_run.py — post-hoc analyzer for an intrinsic-safety audit log.
+check_run.py — post-hoc analyzer for a self-doubt audit log.
 
 Point it at a JSONL audit log (produced by audit_log.py) and it reports the four
 things a reviewer cares about:
@@ -195,7 +195,7 @@ def _print_scorecard(r):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Analyze an intrinsic-safety audit log.")
+    p = argparse.ArgumentParser(description="Analyze a self-doubt audit log.")
     p.add_argument("--log", default="metacog_audit.jsonl")
     p.add_argument("--verify", action="store_true", help="integrity check only")
     p.add_argument("--json", action="store_true", help="machine-readable output")

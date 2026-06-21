@@ -1,5 +1,5 @@
 ---
-name: intrinsic-safety
+name: self-doubt
 description: >-
   Gives an AI agent the discipline to monitor its OWN reasoning from the inside —
   catching repetition loops, unjustified confidence, goal drift, and runaway
@@ -18,7 +18,7 @@ description: >-
 license: Apache-2.0
 metadata:
   version: 3.0.0
-  combines: intrinsic-safety v2 (loop detection + calibration), metacognitive-discipline v1.0.0 (4 disciplines + scorecard)
+  combines: self-doubt v2 (loop detection + calibration), metacognitive-discipline v1.0.0 (4 disciplines + scorecard)
   tags:
     - agent-safety
     - self-monitoring
@@ -28,10 +28,10 @@ metadata:
     - tamper-evident-log
 ---
 
-# Intrinsic Safety — v3
+# Self-Doubt — v3
 
 > Combined skill: the four-discipline coverage of metacognitive-discipline, with
-> the loop-detection and calibration mechanics from intrinsic-safety v2, unified
+> the loop-detection and calibration mechanics from self-doubt v2, unified
 > behind a single Python 3 stdlib gate (`guard.py`), a hash-chained audit log
 > (`audit_log.py`), a tamper-evident scorecard (`check_run.py`), and a working
 > demo of the canonical 89-email loop being prevented.

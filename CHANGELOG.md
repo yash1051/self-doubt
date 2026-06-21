@@ -4,10 +4,10 @@ All notable changes to this skill are documented here.
 
 ## [3.0.0] — 2026-06-22
 
-**Combined release.** v3 merges the two pre-existing intrinsic-safety skills
+**Combined release.** v3 merges two pre-existing self-monitoring skills
 into a single package:
 
-- `intrinsic-safety` v2 (loop detection, calibration, three-discipline subset)
+- `self-doubt` v2 (loop detection, calibration, three-discipline subset)
 - `metacognitive-discipline` v1.0.0 (four-discipline protocol, hash-chained
   audit log, escalation ladder, scorecard, framework integration recipes)
 
@@ -75,7 +75,7 @@ into a single package:
 - Existing JSONL logs from v2 will **not verify** under v3 (different schema
   and no hash chain). Keep them as historical records; start fresh logs.
 
-## [2.0.0] — 2026-06-22 (intrinsic-safety)
+## [2.0.0] — 2026-06-22 (self-doubt)
 
 ### Added
 - Two-tier repetition detection: exact fingerprint + token-set Jaccard with
