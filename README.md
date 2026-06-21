@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🛡️ Intrinsic Safety
+<img src="assets/thumbnail.png" alt="self-doubt — agent skill that makes AI catch its own failures" width="100%">
+
+# 🛡️ self-doubt
 
 ### The first agent skill that makes an AI **catch its own failures from the inside** — before an external kill switch has to.
 
