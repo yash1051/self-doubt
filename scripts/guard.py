@@ -251,17 +251,20 @@ class Guard:
             reasons.append(f"recipient count {recipients_this_run} exceeds cap {self.recipient_cap}")
 
         # ----- 5. step budget ----------------------------------------------
+        # Count prior actions (the current call hasn't been logged yet at this point).
         actions_taken = self._count_actions()
+        # +1 because the agent is about to take an action; budget checks are prospective.
+        prospective = actions_taken + 1
         if self.expected_steps:
-            mult = actions_taken / max(self.expected_steps, 1)
-            if mult >= 4 or (self.hard_step_cap and actions_taken >= self.hard_step_cap):
+            mult = prospective / max(self.expected_steps, 1)
+            if mult >= 4 or (self.hard_step_cap and prospective >= self.hard_step_cap):
                 fired.append({"trigger": "step_budget_exceeded",
-                              "detail": f"actions {actions_taken} ≥ 4× expected {self.expected_steps}"})
-                reasons.append(f"step budget: {actions_taken} actions vs {self.expected_steps} expected (4×)")
+                              "detail": f"actions {prospective} ≥ 4× expected {self.expected_steps}"})
+                reasons.append(f"step budget: {prospective} actions vs {self.expected_steps} expected (4×)")
             elif mult >= YELLOW_AT_STEPS_MULT:
                 fired.append({"trigger": "step_budget_warning",
-                              "detail": f"actions {actions_taken} ≥ 2× expected {self.expected_steps}"})
-                reasons.append(f"step budget warning: {actions_taken} ≥ 2× expected {self.expected_steps}")
+                              "detail": f"actions {prospective} ≥ 2× expected {self.expected_steps}"})
+                reasons.append(f"step budget warning: {prospective} ≥ 2× expected {self.expected_steps}")
 
         # ----- 6. multi-trigger stacking & "red after a miss" ---------------
         triggers_red = {f["trigger"] for f in fired} & {

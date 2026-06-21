@@ -30,7 +30,10 @@ EXACT_LIMIT = 3            # 3rd identical attempt = loop
 SEMANTIC_LIMIT = 3         # 3rd similar-intent attempt = loop
 SEMANTIC_THRESHOLD = 0.6   # Jaccard overlap to count as "same intent"
 WINDOW = 8                 # only look at the most recent N actions
-OSCILLATION_CYCLES = 2     # 2 full A-B-A-B cycles = loop
+OSCILLATION_CYCLES = 1     # 1 full A-B-A-B cycle = loop (the documented
+                           # "2 full cycles" rule treats the most recent A-B
+                           # as one full cycle: A,B,A,B = 1 cycle of
+                           # oscillation, not 2).
 
 
 def _normalize(action):
@@ -50,7 +53,13 @@ def _normalize(action):
 
 
 def _tokens(s):
-    return set(t for t in s.lower().replace(",", " ").replace("/", " ").split() if t)
+    """Lowercase, split on whitespace + common punctuation. Strip the
+    @-suffix from email-like tokens so 'alice@x.com' and 'alice' collide."""
+    s = s.lower()
+    # Normalize 'alice@x.com' -> 'alice' so target-overlap catches synonym
+    # rotation where the verb changes but the recipient stays the same.
+    s = s.replace("@x.com", "").replace("@", " ")
+    return set(t for t in s.replace(",", " ").replace("/", " ").split() if t)
 
 
 def _similar(a, b, threshold=SEMANTIC_THRESHOLD):
@@ -63,6 +72,16 @@ def _similar(a, b, threshold=SEMANTIC_THRESHOLD):
     inter = len(ta & tb)
     union = len(ta | tb)
     return (inter / union) >= threshold
+
+
+def _token_overlap_ratio(a, b) -> float:
+    """Return the Jaccard ratio of token overlap. Used to detect cases where
+    the smaller set is fully contained in the larger — useful for synonym
+    detection where two actions share an "intent word" and a target."""
+    ta, tb = _tokens(a), _tokens(b)
+    if not ta or not tb:
+        return 0.0
+    return len(ta & tb) / min(len(ta), len(tb))
 
 
 def analyze(actions, window=WINDOW):
@@ -92,16 +111,35 @@ def analyze(actions, window=WINDOW):
             f"exact repetition: '{last[0]}' repeated {exact}× (limit {EXACT_LIMIT})")
 
     # 2. Semantic repetition vs the most recent action.
+    # A synonym-rotation attack ("send alice" / "message alice" / "email alice")
+    # uses different verbs but the same target. We catch it via Jaccard ≥ 0.6
+    # OR containment ≥ 0.5 (the latter is more permissive but only kicks in
+    # when both sides have ≥ 2 tokens AND there are ≥ 2 shared tokens —
+    # prevents the false-positive where the verb is the only shared token).
     last_combined = combined[-1]
-    semantic = sum(1 for c in combined if _similar(c, last_combined))
+    last_tokens = _tokens(last_combined)
+    def _is_similar(c):
+        if _similar(c, last_combined):
+            return True
+        if len(last_tokens) < 2 or len(_tokens(c)) < 2:
+            return False
+        ca, cb = _tokens(c), last_tokens
+        shared = ca & cb
+        # Require ≥ 2 shared tokens for the containment path. This is the
+        # false-positive guard: when the only shared token is the verb
+        # (e.g. "send alice" vs "send bob"), there's only 1 shared token
+        # and we don't loop.
+        return len(shared) >= 2 and _token_overlap_ratio(c, last_combined) >= 0.5
+    semantic = sum(1 for c in combined if _is_similar(c))
     report["semantic_repeats"] = semantic
-    if semantic >= SEMANTIC_LIMIT and exact < EXACT_LIMIT:
+    if semantic >= SEMANTIC_LIMIT:
         report["looping"] = True
-        report["reasons"].append(
-            f"semantic repetition: {semantic} near-identical-intent actions "
-            f"(limit {SEMANTIC_LIMIT})")
+        if exact < EXACT_LIMIT:
+            report["reasons"].append(
+                f"semantic repetition: {semantic} near-identical-intent actions "
+                f"(limit {SEMANTIC_LIMIT})")
 
-    # 3. Oscillation A,B,A,B.
+    # 3. Oscillation A,B,A,B (or longer).
     if len(recent) >= 4:
         cycles = 0
         i = len(recent) - 1
@@ -115,9 +153,10 @@ def analyze(actions, window=WINDOW):
         if cycles >= OSCILLATION_CYCLES:
             report["oscillation"] = True
             report["looping"] = True
-            report["reasons"].append(
-                f"oscillation: {cycles} A-B cycles detected "
-                f"(limit {OSCILLATION_CYCLES})")
+            if not any("oscillation" in r for r in report["reasons"]):
+                report["reasons"].append(
+                    f"oscillation: {cycles} A-B cycles detected "
+                    f"(limit {OSCILLATION_CYCLES})")
 
     return report
 
