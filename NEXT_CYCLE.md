@@ -1,29 +1,33 @@
-# v3.1.1 (shipped) → v3.1.2 prompt
+# v3.1.2 (shipped) → v3.1.3 prompt
 
-## What this cycle shipped
-- `--on-goal` default flipped from `yes` → `None`.
-- New `goal_unspecified` trigger fires (yellow) when the agent doesn't say.
-- CLI default changed to omit the flag entirely.
-- New test `test_unspecified_on_goal_is_yellow`.
+## What cycle 3 shipped
+- `Guard(require_explicit_on_goal=True)` strict mode promotes
+  `goal_unspecified` from yellow to red.
+- `Guard.score()` library function: 0-100 overall + 5 named components
+  (explicit_on_goal, evidence_rate, calibration, trigger_response,
+  low_failure_rate).
+- `on_goal` value in JSONL is now a tri-state: `true` / `false` /
+  `"unspecified"`. The score function reads the new value correctly.
+- 4 new tests: strict mode red, score components present, evidence
+  penalty, on_goal-unspecified penalty.
 
-## Hypothesis for cycle 3 (v3.1.2)
+## Hypothesis for cycle 4 (v3.1.3)
 
-The single biggest remaining risk is **silent on_goal=True from the agent's
-own reasoning**, not from missing flags. When an LLM agent decides the action
-is on-goal, it has an incentive to say `yes` because the next step runs more
-smoothly. The CLI default is fixed, but the *agent's* default is not.
+`guard.score()` is a static report — useful for after-the-fact review,
+useless while the agent is mid-run. The single highest-leverage addition
+is a **score-threshold gate** that fires when the discipline score
+*falls below* an operator-set floor. This is the discipline equivalent
+of "your credit score dropped, here's a yellow flag."
 
 **Specific tasks:**
 
-1. Add a `--require-explicit-on-goal` flag to `guard.py` that makes
-   `on_goal=None` a *red* trigger (not just yellow), with a forced
-   "PAUSE — state yes or no before continuing" message in stderr.
-2. Add a `guard.score()` library function that returns a 0-100 score
-   reflecting how disciplined the recent log looks (proportion of explicit
-   on_goal=True vs. on_goal=None, evidence-clause presence rate, mean
-   confidence band, etc.). This is a quality metric the operator can
-   dashboard on.
-3. One test for the new flag, one for `guard.score()`.
+1. Add `Guard(score_floor=80)` constructor param. After computing the
+   score on each `check()`, if the running score < floor, fire a
+   `low_discipline_score` trigger (yellow by default).
+2. CLI: `--score-floor 80` flag.
+3. One test: well-disciplined run stays green, poorly-disciplined run
+   (missing evidence + missing on_goal) gets a low_discipline_score
+   trigger.
 
 ## Verification
 - pytest 100% green

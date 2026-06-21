@@ -62,6 +62,70 @@ def test_unspecified_on_goal_is_yellow():
         os.unlink(lp)
 
 
+def test_strict_mode_makes_unspecified_on_goal_red():
+    """require_explicit_on_goal=True promotes goal_unspecified to red."""
+    g, lp = _fresh_guard(require_explicit_on_goal=True)
+    try:
+        v = g.check(action="send_email", args={"to": "alice"},
+                    confidence=80, evidence="ok",
+                    reversibility="reversible")  # no on_goal
+        assert v.verdict == "red"
+        assert any(t["trigger"] == "goal_unspecified" for t in v.fired_triggers)
+        assert v.next_action in ("pause", "escalate")
+    finally:
+        os.unlink(lp)
+
+
+def test_score_components_reported():
+    """score() returns a 0-100 overall plus 5 named components."""
+    g, lp = _fresh_guard()
+    try:
+        g.check(action="send_email", args={"to": "a"},
+                confidence=80, evidence="ok", on_goal=True,
+                reversibility="costly")
+        g.observed(action="send_email", predicted="200", observed="200",
+                   confidence_was=80, confidence_should=80)
+        s = g.score()
+        assert 0 <= s["score"] <= 100
+        assert set(s["components"].keys()) == {
+            "explicit_on_goal", "evidence_rate", "calibration",
+            "trigger_response", "low_failure_rate",
+        }
+        # Clean run: 4 of 5 components should be 100; calibration may be < 100
+        # because we predicted 200 and observed 200 (realized=100%, conf=80,
+        # so |80-100| = 20 → calibration 80).
+        assert s["components"]["explicit_on_goal"] == 100
+        assert s["components"]["evidence_rate"] == 100
+    finally:
+        os.unlink(lp)
+
+
+def test_score_penalizes_missing_evidence():
+    """If the agent skips the evidence clause, evidence_rate drops."""
+    g, lp = _fresh_guard()
+    try:
+        g.check(action="send_email", args={"to": "a"},
+                confidence=80, evidence="", on_goal=True,
+                reversibility="costly")
+        s = g.score()
+        assert s["components"]["evidence_rate"] < 100
+    finally:
+        os.unlink(lp)
+
+
+def test_score_penalizes_unspecified_on_goal():
+    """If the agent doesn't state on_goal, explicit_on_goal drops."""
+    g, lp = _fresh_guard()
+    try:
+        g.check(action="send_email", args={"to": "a"},
+                confidence=80, evidence="ok",
+                reversibility="costly")  # no on_goal
+        s = g.score()
+        assert s["components"]["explicit_on_goal"] < 100
+    finally:
+        os.unlink(lp)
+
+
 def test_third_identical_call_is_red():
     g, lp = _fresh_guard()
     try:

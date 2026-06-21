@@ -104,13 +104,16 @@ class Guard:
                  expected_steps: Optional[int] = None,
                  recipient_cap: int = RECIPIENT_DEFAULT_CAP,
                  hard_step_cap: Optional[int] = None,
-                 reversibility: str = "reversible"):
+                 reversibility: str = "reversible",
+                 require_explicit_on_goal: bool = False):
         self.log = AuditLog(log_path)
         self.goal = goal
         self.expected_steps = expected_steps
         self.recipient_cap = recipient_cap
         self.hard_step_cap = hard_step_cap
         self.default_reversibility = reversibility
+        # When True, `on_goal=None` becomes a red (not yellow) trigger.
+        self.require_explicit_on_goal = require_explicit_on_goal
 
     # --- helpers -----------------------------------------------------------
 
@@ -236,10 +239,18 @@ class Guard:
         # ----- 3. goal drift ------------------------------------------------
         # `on_goal=None` means the agent didn't say — fire a `goal_unspecified`
         # trigger to force an explicit yes/no before the action proceeds.
+        # Strict mode (require_explicit_on_goal) promotes the trigger to red.
         if on_goal is None:
-            fired.append({"trigger": "goal_unspecified",
-                          "detail": "agent did not state on_goal=yes/no explicitly"})
-            reasons.append("on_goal was not stated; agent must explicitly answer yes or no")
+            strict = self.require_explicit_on_goal
+            fired.append({
+                "trigger": "goal_unspecified",
+                "detail": ("STRICT MODE: agent did not state on_goal=yes/no; "
+                           "treated as red" if strict else
+                           "agent did not state on_goal=yes/no explicitly"),
+            })
+            reasons.append(
+                "on_goal was not stated; agent must explicitly answer yes or no"
+            )
         elif on_goal is False:
             fired.append({"trigger": "goal_drift",
                           "detail": "agent flagged current action as off-goal"})
@@ -281,6 +292,10 @@ class Guard:
         triggers_yellow = {f["trigger"] for f in fired} & {
             "exact_repetition_yellow", "step_budget_warning", "confidence_no_evidence",
         }
+        # In strict mode, `goal_unspecified` joins the red tier so an
+        # unstated on_goal alone halts the run instead of just warning.
+        if self.require_explicit_on_goal:
+            triggers_red = triggers_red | {"goal_unspecified"}
         # Trigger right after a missed prediction = red regardless of individual threshold.
         just_missed = self._count_missed_predictions() > 0
         # Per the discipline: one trigger near threshold → yellow, two → red,
@@ -288,7 +303,7 @@ class Guard:
         if len(triggers_red) >= 1 or (len(triggers_yellow) >= 2) or (fired and just_missed and len(fired) >= 1):
             verdict = "red"
             next_action = "escalate" if any(
-                t in {"dangerous_tool", "recipient_cap_exceeded", "goal_drift"}
+                t in {"dangerous_tool", "recipient_cap_exceeded", "goal_drift", "goal_unspecified"}
                 for t in {f["trigger"] for f in fired}
             ) else "pause"
         elif fired:
@@ -302,7 +317,7 @@ class Guard:
             args=args,
             confidence=confidence,
             evidence=evidence,
-            on_goal=_as_bool(on_goal),
+            on_goal=(on_goal if on_goal is not None else "unspecified"),
             escalate=(verdict == "red"),
             decision=next_action,
         )
@@ -354,6 +369,110 @@ class Guard:
                     if isinstance(c, (int, float)):
                         out.append(int(c))
         return out
+
+    # --- score --------------------------------------------------------------
+
+    def score(self) -> dict:
+        """Return a 0-100 discipline score over the current log.
+
+        Components (each 0-100, weighted equally into the final score):
+          - explicit_on_goal:  share of pre_action events with on_goal in {true, false}
+                               (None = unstated, counts against)
+          - evidence_rate:     share of pre_action events with non-empty evidence clause
+          - calibration:       100 - |confidence - realized accuracy| (last 5 post_actions)
+          - trigger_response:  share of trigger events with a non-empty response
+          - low_failure_rate:  100 - (failed_outcomes / total_outcomes * 100)
+
+        Returns a dict with the components and the overall score.
+        """
+        if not os.path.exists(self.log.path):
+            return {"score": 100, "components": {}, "events": 0}
+
+        pre, post, triggers, outcomes_failed, outcomes_total = [], [], 0, 0, 0
+        explicit_og, with_evidence = 0, 0
+        confidence_with_outcome, calibration_samples = [], 0
+
+        with open(self.log.path, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    ev = json.loads(line)
+                except Exception:
+                    continue
+                t, d = ev.get("type"), ev.get("data", {})
+                if t == "pre_action":
+                    pre.append(d)
+                    og = d.get("on_goal")
+                    if og is not None and og != "unspecified":
+                        explicit_og += 1
+                    if d.get("evidence"):
+                        with_evidence += 1
+                elif t == "post_action":
+                    post.append(d)
+                    if d.get("confidence_was") is not None:
+                        confidence_with_outcome.append(d)
+                elif t == "trigger":
+                    if d.get("response"):
+                        triggers += 1
+                elif t == "outcome":
+                    outcomes_total += 1
+                    if d.get("matched_goal") == "no":
+                        outcomes_failed += 1
+
+        n_pre = len(pre)
+        explicit_og_pct = (explicit_og / n_pre * 100) if n_pre else 100
+        evidence_pct = (with_evidence / n_pre * 100) if n_pre else 100
+
+        # Calibration: average |confidence - realized accuracy| over last 5.
+        if confidence_with_outcome:
+            last5 = confidence_with_outcome[-5:]
+            deltas = []
+            for p in last5:
+                conf = p.get("confidence_was")
+                if conf is None:
+                    continue
+                realized = 1.0 if not _missed(p.get("predicted", ""), p.get("observed", "")) else 0.0
+                deltas.append(abs(conf - realized * 100))
+            avg_delta = sum(deltas) / len(deltas) if deltas else 0
+            calibration = max(0.0, 100.0 - avg_delta)
+        else:
+            calibration = 100.0  # no signal yet = neutral, not penalised
+
+        if outcomes_total:
+            failure_pct = outcomes_failed / outcomes_total * 100
+            low_failure = max(0.0, 100.0 - failure_pct)
+        else:
+            low_failure = 100.0
+
+        # trigger_response: share of trigger events that have a non-empty response.
+        with open(self.log.path, "r", encoding="utf-8") as f:
+            n_trig_total, n_trig_acted = 0, 0
+            for line in f:
+                try:
+                    ev = json.loads(line)
+                except Exception:
+                    continue
+                if ev.get("type") == "trigger":
+                    n_trig_total += 1
+                    if ev["data"].get("response"):
+                        n_trig_acted += 1
+        if n_trig_total:
+            trigger_response = n_trig_acted / n_trig_total * 100
+        else:
+            trigger_response = 100.0
+
+        components = {
+            "explicit_on_goal": round(explicit_og_pct, 1),
+            "evidence_rate": round(evidence_pct, 1),
+            "calibration": round(calibration, 1),
+            "trigger_response": round(trigger_response, 1),
+            "low_failure_rate": round(low_failure, 1),
+        }
+        overall = round(sum(components.values()) / len(components), 1)
+        return {
+            "score": overall,
+            "components": components,
+            "events": len(pre) + len(post) + n_trig_total,
+        }
 
 
 def _digest_str(args) -> str:

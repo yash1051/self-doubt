@@ -176,3 +176,54 @@ This is the single highest-leverage behavior fix in the v3 series.
 Add a `--require-explicit-on-goal` flag that turns the yellow into a
 hard red, plus a `guard.score()` library function returning a 0-100
 discipline score for dashboarding. Two small features, both Tier 2.
+
+## [v3.1.2] — 2026-06-21T22:30Z — cycle 3
+
+**Hypothesis (what gap am I closing?):** v3.1.1's `goal_unspecified` is
+yellow, which is the right default but not strict enough for high-stakes
+runs. v3.1.1 also has no way to dashboard the run's overall discipline —
+only the per-step triggers. Operators want a single number.
+
+**Change:**
+- `Guard(require_explicit_on_goal=True)` constructor param. When True,
+  `goal_unspecified` is promoted from yellow to red and the verdict
+  fires `pause`/`escalate`. Logged as "STRICT MODE" in the trigger detail.
+- `Guard.score()` returns `{score, components, events}`. 0-100 overall,
+  5 named components (each 0-100): explicit_on_goal, evidence_rate,
+  calibration (|confidence - realized accuracy|), trigger_response,
+  low_failure_rate. All weighted equally.
+- `on_goal` JSONL value is now a tri-state: `true` / `false` / `"unspecified"`.
+  The "unspecified" string is what makes the score function able to
+  count unspecified as a *separate* category from explicit true/false.
+- 4 new tests: strict-mode-red, score-components-present,
+  evidence-penalty, on_goal-unspecified-penalty.
+- Version bumped to 3.1.2.
+
+**Why this, not the other things I noticed:**
+- Strict mode + score are the natural pair: strict mode is the
+  per-step enforcement, score is the per-run dashboard. Shipping
+  both at once means operators can opt into strict mode AND
+  see the discipline score trend over time.
+- Tri-state on_goal is a real bug fix disguised as a feature: the
+  old `bool` collapsed `None` and `True` into the same wire value
+  for the score function, making the score blind to unspecified.
+
+**Critique of self:**
+- What I might have gotten wrong: I made the `score` function
+  weight all 5 components equally. In practice, calibration and
+  low_failure_rate are the strongest signals; trigger_response
+  is weakest (most runs have 0 trigger events, defaulting to 100).
+  v3.2 should re-weight.
+- What's still missing: score is reactive (computed on demand).
+  A real dashboard would push score updates to a sink. Out of
+  scope for v3.
+- Confidence the change is correct: 82. The strict-mode and
+  score changes are well-isolated; tests cover both happy and
+  penalty paths. The tri-state change is the only one that
+  could surprise users mid-run.
+
+**Next cycle's prompt (the very next thing to try):**
+Add a `score_floor` constructor param + `--score-floor` CLI flag that
+fires a `low_discipline_score` trigger (yellow) when the running
+score falls below the floor. This converts the score from a static
+report into a live gate.
