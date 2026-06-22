@@ -106,7 +106,8 @@ class Guard:
                  hard_step_cap: Optional[int] = None,
                  reversibility: str = "reversible",
                  require_explicit_on_goal: bool = False,
-                 score_floor: Optional[float] = None):
+                 score_floor: Optional[float] = None,
+                 component_floors: Optional[dict] = None):
         self.log = AuditLog(log_path)
         self.goal = goal
         self.expected_steps = expected_steps
@@ -119,6 +120,10 @@ class Guard:
         # post-check score drops below this, fire a `low_discipline_score`
         # trigger (yellow). None = no gate.
         self.score_floor = score_floor
+        # Per-component floors. Dict like {"evidence_rate": 90, "calibration": 70}.
+        # When a component score drops below its floor, fire a
+        # `low_<component>` trigger (yellow). None = no per-component gates.
+        self.component_floors = component_floors or {}
 
     # --- helpers -----------------------------------------------------------
 
@@ -368,6 +373,33 @@ class Guard:
                 if verdict == "green":
                     verdict = "yellow"
                     next_action = "proceed_cautious"
+
+        # Per-component floors fire one trigger each (named after the
+        # component). Independent of the global score_floor.
+        if self.component_floors:
+            s = self.score()
+            for comp, floor in self.component_floors.items():
+                v = s["components"].get(comp)
+                if v is None:
+                    continue
+                if v < floor:
+                    trig_name = f"low_{comp}"
+                    fired.append({
+                        "trigger": trig_name,
+                        "detail": f"{comp}={v} below floor {floor}",
+                    })
+                    reasons.append(
+                        f"component {comp}={v} below floor {floor}"
+                    )
+                    self.log.trigger(
+                        trigger=trig_name,
+                        detail=f"{comp}={v} below floor {floor}",
+                        response="proceed_cautious",
+                        result="",
+                    )
+                    if verdict == "green":
+                        verdict = "yellow"
+                        next_action = "proceed_cautious"
 
         return Verdict(verdict=verdict, reasons=reasons,
                        next_action=next_action, fired_triggers=fired)

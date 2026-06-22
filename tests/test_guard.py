@@ -200,10 +200,60 @@ def test_score_breakdown_returns_trends():
             "explicit_on_goal", "evidence_rate", "calibration",
             "trigger_response", "low_failure_rate",
         }
-        # With 8 actions, recent window = 5, prior = 3 → trends should
-        # be 'new' (prior window too small to compute) or 'up'/'down'/'flat'.
         for t in bd["trends"].values():
             assert t in ("new", "up", "down", "flat")
+    finally:
+        os.unlink(lp)
+
+
+def test_component_floor_fires_low_calibration_trigger():
+    """Per-component floors fire one `low_<component>` trigger per
+    breached component. Calibration in particular: a 95% confidence
+    with a 500 response (missed) drops calibration near 0 and the
+    `calibration=90` floor must fire."""
+    tmp_log = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".jsonl", delete=False, prefix="cf-"
+    )
+    tmp_log.close()
+    try:
+        g = Guard(log_path=tmp_log.name, goal="g", expected_steps=100,
+                  component_floors={"calibration": 90})
+        # Miss the prediction hard to drop calibration.
+        g.check(action="send_email", args={"to": "a"},
+                confidence=95, evidence="ok", on_goal=True,
+                reversibility="costly")
+        g.observed(action="send_email", predicted="200", observed="500",
+                   confidence_was=95, confidence_should=30)
+        g.check(action="send_email", args={"to": "b"},
+                confidence=95, evidence="ok", on_goal=True,
+                reversibility="costly")
+        v = g.check(action="send_email", args={"to": "c"},
+                    confidence=95, evidence="ok", on_goal=True,
+                    reversibility="costly")
+        assert v.verdict == "yellow"
+        assert any(t["trigger"] == "low_calibration" for t in v.fired_triggers)
+        assert any("calibration" in r and "below floor" in r for r in v.reasons)
+    finally:
+        os.unlink(tmp_log.name)
+
+
+def test_component_floor_only_fires_for_breached_components():
+    """A floor that's *easy* to clear shouldn't fire. A floor that's
+    impossible to clear (calibration=1000, since max is 100) WILL fire
+    on a realistic run — calibration tops out around 80 in a perfect
+    run because of the |confidence - realized| penalty. So this test
+    uses a floor that's clearly easy to clear."""
+    g, lp = _fresh_guard(component_floors={"explicit_on_goal": 50})
+    try:
+        # All actions explicit on_goal=True → explicit_on_goal = 100 ≥ 50.
+        g.check(action="send_email", args={"to": "a"},
+                confidence=80, evidence="ok", on_goal=True,
+                reversibility="costly")
+        v = g.check(action="send_email", args={"to": "b"},
+                    confidence=80, evidence="ok", on_goal=True,
+                    reversibility="costly")
+        # explicit_on_goal component is at 100, well above floor 50.
+        assert not any(t["trigger"] == "low_explicit_on_goal" for t in v.fired_triggers)
     finally:
         os.unlink(lp)
 

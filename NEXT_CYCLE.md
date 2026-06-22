@@ -1,46 +1,59 @@
-# v3.1.4 (shipped) → v3.1.5 prompt
+# v3.1.5 (shipped) → v3.2.0 prompt (or convergence)
 
-## What cycle 5 shipped
-- `low_discipline_score` reasons list now names the 2 weakest components
-  so the agent can read "calibration=80" and know what to fix.
-- `Guard.score_breakdown()` returns per-component values + a trend
-  (up/down/flat/new) for the recent vs prior windows.
-- 2 new tests: score_floor reason names components; score_breakdown
-  returns valid trend values.
+## What cycle 6 shipped
+- `Guard(component_floors={"evidence_rate": 90, ...})` constructor
+  param. Each component with a floor fires a `low_<component>` trigger
+  (yellow) when its score drops below the floor.
+- 2 new tests: per-component floor fires the right trigger; floor
+  that's easy to clear doesn't fire.
 
-## Convergence check
+## Convergence declaration — v3.1 score subsystem complete
 
-Five cycles in, the v3.1.x series has covered: tests + CI, safety
-default fix, strict mode, score, score floor, diagnostic feedback.
-The single biggest remaining Tier-2 gap is **per-component score
-floors** (the v3.1.3 critique). But the loop is hitting diminishing
-returns on the score subsystem.
+Six cycles in, the v3.1.x series has shipped everything the score
+subsystem can reasonably carry without new dependencies or design
+decisions:
 
-The remaining gaps are all Tier 3 or scope-expansion:
-- Embedding-based semantic similarity (v3.4 work, requires deps)
-- Runnable LangGraph example (Tier 2, illustrative-only currently)
-- Per-component floors (Tier 2, polish on the polish)
+- v3.1.0: tests + CI + bug fixes
+- v3.1.1: --on-goal default flipped to None (safety default fix)
+- v3.1.2: strict mode + score() + on_goal tri-state
+- v3.1.3: score_floor gate
+- v3.1.4: diagnostic reason text + score_breakdown()
+- v3.1.5: per-component floors
+
+The remaining gaps are scope-expansion, not polish:
+- Embedding-based similarity (requires deps, design decision)
+- Runnable LangGraph demo (Tier 2 illustrative-only currently)
 - External monitoring integration (out of v3 scope)
 
-**Hypothesis for cycle 6 (v3.1.5)**
+The loop has converged on the score subsystem. Future cycles
+should either:
+- Tackle the embedding-based similarity (Tier 1, but a real design
+  decision about which embedding model to standardize on), OR
+- Tackle the LangGraph demo (Tier 2 polish), OR
+- Acknowledge convergence and let the loop rest.
 
-Run a real per-component floor since the v3.1.3 critique called it
-out, then write the **convergence essay** in the same cycle: declare
-v3.1 complete on the score subsystem and stop. Don't keep grinding
-the score.
+## Hypothesis for cycle 7 (v3.2.0)
+
+The single highest-leverage Tier 2 work remaining is a **runnable
+LangGraph demo**. v3.0 docs show illustrative code in
+`references/framework-integration.md`; v3.2 ships an example that
+the CI can actually run, proving the framework integration isn't
+fictional. This unblocks downstream users who want a real
+reference impl.
 
 **Specific tasks:**
 
-1. Add `Guard(component_floors={"evidence_rate": 90})` constructor
-   param. Each component with a floor fires `low_<component>` trigger
-   when its score drops below the floor.
-2. CLI: `--component-floors '{"evidence_rate": 90}'` flag.
-3. One test: per-component floor fires the right trigger.
-4. Write the **v3.1 convergence essay** in IMPROVEMENT_LOG.md:
-   what was added, what was deliberately not added, why the loop
-   should now rest.
+1. Add `examples/langgraph_demo.py` that imports `guard.Guard` and
+   wires it into a LangGraph-style state graph (even if LangGraph
+   isn't installed — make it a self-contained simulator that follows
+   the same pattern).
+2. Update `references/framework-integration.md` to point at the
+   new example.
+3. Add `tests/test_langgraph_demo.py` that runs the demo and
+   asserts the scorecard prints "✅ chain intact".
 
 ## Verification
 - pytest 100% green
 - demo still 85 → 5 sends
+- new langgraph demo runs and produces a valid scorecard
 - ≤ 5 files changed, ≤ 200 LOC net

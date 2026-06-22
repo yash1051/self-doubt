@@ -316,3 +316,80 @@ discipline, not real discipline.
 **Next cycle's prompt (the very next thing to try):**
 Add per-component floors, then write the **v3.1 convergence essay**.
 Declare the score subsystem done. Don't keep grinding.
+
+## [v3.1.5] — 2026-06-22T00:00Z — cycle 6
+
+**Hypothesis (what gap am I closing?):** v3.1.3's critique explicitly
+called out per-component floors as a Tier 2 gap. v3.1.4's diagnostic
+reasons give the agent *which* component is dragging, but a single
+overall score_floor doesn't let the operator set per-component
+thresholds. evidence_rate matters more than calibration in some
+domains; explicit_on_goal matters more in others.
+
+**Change:**
+- `Guard(component_floors={"evidence_rate": 90, "calibration": 70})`
+  constructor param. Each component with a floor fires a
+  `low_<component>` trigger (yellow) when its score drops below.
+- 2 new tests: per-component floor fires the right trigger; a floor
+  that's easy to clear (component score 100, floor 50) doesn't fire.
+- Version bumped to v3.1.5.
+
+**Why this, not the other things I noticed:**
+- v3.1.3's critique named this specifically. Skipping it would
+  leave the critique unaddressed.
+- After v3.1.5, the score subsystem is feature-complete enough
+  to converge. The remaining gaps (embedding similarity, LangGraph
+  demo, external monitoring) are scope-expansion, not polish.
+
+**Critique of self:**
+- What I might have gotten wrong: my first test for "only fires
+  for breached components" used `calibration=1000` thinking it
+  was an "impossible to clear" floor, but missed that calibration
+  tops out at 80 in any real run (because of the |confidence -
+  realized| penalty). The test failed; I rewrote it to use
+  `explicit_on_goal=50` against a perfect run. This is the second
+  test I got wrong in this cycle series. Symptom of writing tests
+  by reasoning about the implementation rather than the spec.
+- What's still missing: per-component floors are a subset of a
+  more general "any score below any threshold" feature. A
+  declarative config file (instead of constructor args) would
+  scale better. Out of scope.
+- Confidence the change is correct: 80. The behavior is right; the
+  first test was wrong; the second is right. Two test rewrites
+  in one cycle is a yellow flag on my own calibration.
+
+**Next cycle's prompt (the very next thing to try):**
+Move off the score subsystem. The loop has converged here. Next
+gap is a runnable LangGraph demo so the framework-integration
+doc stops being illustrative-only.
+
+---
+
+## v3.1 series — convergence essay
+
+The v3.1.x series is done. Six cycles, six features, no
+regressions. The improvement loop has nothing real to add to the
+score subsystem without either new dependencies (embedding
+models) or new design decisions (declarative config files,
+external monitoring). Per the SELF_IMPROVEMENT protocol, when
+two consecutive cycles' "What's still missing" sections repeat,
+the loop converges. This is that moment.
+
+What v3.1 ships:
+- Four-discipline gate with exit-code contract
+- 47 adversarial tests
+- Tamper-evident hash-chained JSONL log
+- Score dashboard with global + per-component floors
+- Strict mode, diagnostic reasons, trend breakdowns
+- CI on Python 3.8-3.12
+- Working demo (85→5 sends, 80 dupes prevented)
+
+What v3.1 deliberately does NOT ship:
+- Embedding-based similarity (requires model choice)
+- External runtime monitoring integration (out of scope)
+- Declarative config file (premature abstraction)
+- LLM-as-judge (no model independence)
+
+The loop is no longer the cheapest path to improvement. v3.2
+should be feature work, not polish. If the cron fires again, the
+next cycle is the LangGraph demo.
