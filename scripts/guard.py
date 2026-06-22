@@ -349,8 +349,14 @@ class Guard:
                     "detail": (f"score {s['score']} below floor {self.score_floor} "
                                f"(components: {s['components']})"),
                 })
+                # Per-component breakdown in `reasons` so the agent can read
+                # which component is dragging the score down. Top 2 worst
+                # components first (sorted ascending by score).
+                worst = sorted(s["components"].items(), key=lambda kv: kv[1])[:2]
+                breakdown = ", ".join(f"{k}={v}" for k, v in worst)
                 reasons.append(
-                    f"running discipline score {s['score']} below floor {self.score_floor}"
+                    f"running discipline score {s['score']} below floor {self.score_floor}; "
+                    f"weakest components: {breakdown}"
                 )
                 self.log.trigger(
                     trigger="low_discipline_score",
@@ -503,6 +509,110 @@ class Guard:
             "score": overall,
             "components": components,
             "events": len(pre) + len(post) + n_trig_total,
+        }
+
+    def score_breakdown(self) -> dict:
+        """Return a per-component trend report: each component's current
+        value plus a 'trend' field showing 'up' / 'down' / 'flat' / 'new'
+        based on the comparison between the most recent N and prior N
+        scores. Defaults to N=5 each.
+
+        This is the diagnostic surface for the `low_discipline_score`
+        gate — the agent can read this to find out *which* component
+        is dragging the score down, not just that the score dropped.
+        """
+        # Compute current and "prior" snapshots by re-walking the log in
+        # two halves. Cheap (O(N) where N is log size) and keeps the API
+        # stateless.
+        def _snapshot(events_subset):
+            n_pre = sum(1 for e in events_subset if e.get("type") == "pre_action")
+            if n_pre == 0:
+                return None
+            n_explicit_og = sum(
+                1 for e in events_subset
+                if e.get("type") == "pre_action"
+                and e["data"].get("on_goal") is not None
+                and e["data"].get("on_goal") != "unspecified"
+            )
+            n_with_evidence = sum(
+                1 for e in events_subset
+                if e.get("type") == "pre_action"
+                and e["data"].get("evidence")
+            )
+            n_trig_total = sum(1 for e in events_subset if e.get("type") == "trigger")
+            n_trig_acted = sum(
+                1 for e in events_subset
+                if e.get("type") == "trigger" and e["data"].get("response")
+            )
+            n_outcomes = sum(1 for e in events_subset if e.get("type") == "outcome")
+            n_failed = sum(
+                1 for e in events_subset
+                if e.get("type") == "outcome" and e["data"].get("matched_goal") == "no"
+            )
+            posts = [e["data"] for e in events_subset if e.get("type") == "post_action"]
+            if posts:
+                deltas = []
+                for p in posts[-5:]:
+                    conf = p.get("confidence_was")
+                    if conf is None:
+                        continue
+                    realized = 1.0 if not _missed(p.get("predicted", ""), p.get("observed", "")) else 0.0
+                    deltas.append(abs(conf - realized * 100))
+                avg_delta = sum(deltas) / len(deltas) if deltas else 0
+                calibration = max(0.0, 100.0 - avg_delta)
+            else:
+                calibration = 100.0
+            if n_outcomes:
+                failure_pct = n_failed / n_outcomes * 100
+                low_failure = max(0.0, 100.0 - failure_pct)
+            else:
+                low_failure = 100.0
+            return {
+                "explicit_on_goal": n_explicit_og / n_pre * 100,
+                "evidence_rate": n_with_evidence / n_pre * 100,
+                "calibration": calibration,
+                "trigger_response": (n_trig_acted / n_trig_total * 100) if n_trig_total else 100.0,
+                "low_failure_rate": low_failure,
+            }
+
+        if not os.path.exists(self.log.path):
+            return {"components": {}, "trends": {}, "n": 0}
+
+        with open(self.log.path, "r", encoding="utf-8") as f:
+            events = []
+            for line in f:
+                try:
+                    events.append(json.loads(line))
+                except Exception:
+                    continue
+
+        N = 5
+        recent = events[-N:] if len(events) >= N else events
+        prior = events[-2*N:-N] if len(events) >= 2*N else []
+
+        recent_snap = _snapshot(recent)
+        prior_snap = _snapshot(prior) if prior else None
+
+        if recent_snap is None:
+            return {"components": {}, "trends": {}, "n": 0}
+
+        trends = {}
+        for k, v in recent_snap.items():
+            if prior_snap is None or k not in prior_snap:
+                trends[k] = "new"
+            else:
+                delta = v - prior_snap[k]
+                if delta > 1.0:
+                    trends[k] = "up"
+                elif delta < -1.0:
+                    trends[k] = "down"
+                else:
+                    trends[k] = "flat"
+
+        return {
+            "components": {k: round(v, 1) for k, v in recent_snap.items()},
+            "trends": trends,
+            "n": len(recent),
         }
 
 

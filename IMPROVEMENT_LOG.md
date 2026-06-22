@@ -275,3 +275,44 @@ the per-component breakdown in the trigger's `reasons` list (not
 just `detail`), and add a `Guard.score_breakdown()` that returns
 per-component trend (up/down over last 5 calls). A teaching gate,
 not just a tripwire.
+
+## [v3.1.4] — 2026-06-21T23:30Z — cycle 5
+
+**Hypothesis (what gap am I closing?):** v3.1.3's `low_discipline_score`
+trigger was a tripwire — it said "you're below floor" but not *why*.
+A score gate that doesn't help the agent *fix the score* is decorative
+discipline, not real discipline.
+
+**Change:**
+- `low_discipline_score` reasons list now names the 2 weakest
+  components (e.g. "weakest components: calibration=80, evidence=90").
+  The agent can now read the reason and know what to improve.
+- `Guard.score_breakdown()` returns `{components, trends, n}`. Each
+  component has a current value and a trend (up/down/flat/new) over
+  the recent vs prior window of events.
+- 2 new tests: score_floor reason names components; score_breakdown
+  returns valid trend values.
+- Version bumped to 3.1.4.
+
+**Why this, not the other things I noticed:**
+- The trigger's *detail* already had the breakdown; the *reasons* list
+  didn't. Reasons is what the agent loop reads and acts on. Moving
+  the breakdown into reasons turns the gate from a wall the agent
+  bumps into into a signpost the agent can read.
+- `score_breakdown()` is the natural pairing for the new reason text:
+  reasons gives the *what*; breakdown gives the *trajectory*.
+
+**Critique of self:**
+- What I might have gotten wrong: "weakest 2 components" is a guess
+  at the right verbosity. Too many = noise, too few = unhelpful.
+  Could be made configurable (`--breakdown-depth`).
+- What's still missing: per-component floors (v3.1.3 critique).
+  v3.1.5 will close this gap and then the score subsystem is
+  done — convergence essay in the same cycle.
+- Confidence the change is correct: 86. Tests are tight; behavior
+  is additive; reason list change is backward-compatible (extra
+  field, not a rename).
+
+**Next cycle's prompt (the very next thing to try):**
+Add per-component floors, then write the **v3.1 convergence essay**.
+Declare the score subsystem done. Don't keep grinding.

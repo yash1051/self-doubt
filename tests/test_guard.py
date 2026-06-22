@@ -159,6 +159,55 @@ def test_score_floor_off_does_not_fire():
         os.unlink(lp)
 
 
+def test_score_floor_reasons_include_weakest_components():
+    """The reasons list must name the worst-scoring components so the
+    agent can read them and know what to fix. A score gate that just
+    says 'you are below floor' is a tripwire; a score gate that says
+    'calibration=80' is teaching."""
+    g, lp = _fresh_guard(score_floor=99)
+    try:
+        g.check(action="send_email", args={"to": "a"},
+                confidence=80, evidence="ok", on_goal=True,
+                reversibility="costly")
+        g.observed(action="send_email", predicted="200", observed="200",
+                   confidence_was=80, confidence_should=80)
+        v = g.check(action="send_email", args={"to": "b"},
+                    confidence=80, evidence="ok", on_goal=True,
+                    reversibility="costly")
+        assert v.verdict == "yellow"
+        # Find the score_floor reason and check it names a component.
+        score_reasons = [r for r in v.reasons if "below floor" in r]
+        assert score_reasons
+        assert "=" in score_reasons[0], \
+            f"score_floor reason should name components: {score_reasons[0]!r}"
+    finally:
+        os.unlink(lp)
+
+
+def test_score_breakdown_returns_trends():
+    """score_breakdown returns per-component values + trend (up/down/flat/new)."""
+    g, lp = _fresh_guard()
+    try:
+        for to in ["alice", "bob", "carol", "dave", "eve", "frank", "grace", "heidi"]:
+            g.check(action="send_email", args={"to": to},
+                    confidence=80, evidence="ok", on_goal=True,
+                    reversibility="costly")
+        bd = g.score_breakdown()
+        assert "components" in bd
+        assert "trends" in bd
+        assert "n" in bd
+        assert set(bd["components"].keys()) == {
+            "explicit_on_goal", "evidence_rate", "calibration",
+            "trigger_response", "low_failure_rate",
+        }
+        # With 8 actions, recent window = 5, prior = 3 → trends should
+        # be 'new' (prior window too small to compute) or 'up'/'down'/'flat'.
+        for t in bd["trends"].values():
+            assert t in ("new", "up", "down", "flat")
+    finally:
+        os.unlink(lp)
+
+
 def test_third_identical_call_is_red():
     g, lp = _fresh_guard()
     try:

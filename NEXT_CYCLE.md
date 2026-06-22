@@ -1,32 +1,44 @@
-# v3.1.3 (shipped) → v3.1.4 prompt
+# v3.1.4 (shipped) → v3.1.5 prompt
 
-## What cycle 4 shipped
-- `Guard(score_floor=N)` constructor param. After each `check()`,
-  computes the running discipline score; if below N, fires a
-  `low_discipline_score` trigger (yellow).
-- CLI: `--score-floor N` flag.
-- 2 new tests: floor fires trigger, no floor doesn't fire.
-- Bug fix: missing `--hard-step-cap` argparse arg (regression from
-  prior cycle's CLI reorganization).
+## What cycle 5 shipped
+- `low_discipline_score` reasons list now names the 2 weakest components
+  so the agent can read "calibration=80" and know what to fix.
+- `Guard.score_breakdown()` returns per-component values + a trend
+  (up/down/flat/new) for the recent vs prior windows.
+- 2 new tests: score_floor reason names components; score_breakdown
+  returns valid trend values.
 
-## Hypothesis for cycle 5 (v3.1.4)
+## Convergence check
 
-The `score_floor` gate fires when the score drops, but the *agent*
-has no way to see *which component* dropped. The discipline feedback
-loop is incomplete: agent gets "you're below floor" but not "your
-evidence_rate is the problem." A good score gate should be a *teaching*
-mechanism, not just a tripwire.
+Five cycles in, the v3.1.x series has covered: tests + CI, safety
+default fix, strict mode, score, score floor, diagnostic feedback.
+The single biggest remaining Tier-2 gap is **per-component score
+floors** (the v3.1.3 critique). But the loop is hitting diminishing
+returns on the score subsystem.
+
+The remaining gaps are all Tier 3 or scope-expansion:
+- Embedding-based semantic similarity (v3.4 work, requires deps)
+- Runnable LangGraph example (Tier 2, illustrative-only currently)
+- Per-component floors (Tier 2, polish on the polish)
+- External monitoring integration (out of v3 scope)
+
+**Hypothesis for cycle 6 (v3.1.5)**
+
+Run a real per-component floor since the v3.1.3 critique called it
+out, then write the **convergence essay** in the same cycle: declare
+v3.1 complete on the score subsystem and stop. Don't keep grinding
+the score.
 
 **Specific tasks:**
 
-1. When `low_discipline_score` fires, include the per-component
-   breakdown in the trigger `detail` (already done — verify) and
-   in the `reasons` list. The agent should be able to read
-   "evidence_rate=40, calibration=80" and know what to fix.
-2. Add a `Guard.score_breakdown()` method that returns the component
-   dict plus a per-component trend (is each component going up or
-   down over the last 5 calls?). This is a Tier 2 polish.
-3. One test: floor fires trigger, detail includes component breakdown.
+1. Add `Guard(component_floors={"evidence_rate": 90})` constructor
+   param. Each component with a floor fires `low_<component>` trigger
+   when its score drops below the floor.
+2. CLI: `--component-floors '{"evidence_rate": 90}'` flag.
+3. One test: per-component floor fires the right trigger.
+4. Write the **v3.1 convergence essay** in IMPROVEMENT_LOG.md:
+   what was added, what was deliberately not added, why the loop
+   should now rest.
 
 ## Verification
 - pytest 100% green

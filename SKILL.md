@@ -17,7 +17,7 @@ description: >-
   shut down from outside.
 license: Apache-2.0
 metadata:
-  version: 3.1.3
+  version: 3.1.4
   combines: self-doubt v2 (loop detection + calibration), metacognitive-discipline v1.0.0 (4 disciplines + scorecard)
   tags:
     - agent-safety
